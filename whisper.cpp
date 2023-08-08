@@ -404,8 +404,10 @@ struct whisper_vocab {
 };
 
 struct whisper_segment {
-    int64_t t0;
-    int64_t t1;
+    int64_t seg_begin;
+    int64_t seg_end;
+
+    int64_t first_token_begin;
 
     std::string text;
 
@@ -3575,13 +3577,13 @@ static int whisper_wrap_segment(struct whisper_context & ctx, struct whisper_sta
 
         if (acc + cur > max_len && i > 0 && should_split_on_word(txt, split_on_word)) {
             state.result_all.back().text = std::move(text);
-            state.result_all.back().t1 = token.t0;
+            state.result_all.back().seg_end = token.t0;
             state.result_all.back().tokens.resize(i);
             state.result_all.back().speaker_turn_next = false;
 
             state.result_all.push_back({});
-            state.result_all.back().t0 = token.t0;
-            state.result_all.back().t1 = segment.t1;
+            state.result_all.back().seg_begin = token.t0;
+            state.result_all.back().seg_end = segment.seg_end;
 
             // add tokens [i, end] to the new segment
             state.result_all.back().tokens.insert(
@@ -4650,6 +4652,7 @@ int whisper_full_with_state(
             if (!tokens_cur.empty() && ctx->model.n_loaded > 0) {
                 int  i0 = 0;
                 auto t0 = seek + 2*(tokens_cur.front().tid - whisper_token_beg(ctx));
+                auto ft = t0;
 
                 std::string text;
                 bool speaker_turn_next = false;
@@ -4674,6 +4677,7 @@ int whisper_full_with_state(
                         if (!text.empty()) {
                             const auto tt0 = params.speed_up ? 2*t0 : t0;
                             const auto tt1 = params.speed_up ? 2*t1 : t1;
+                            const auto fft = params.speed_up ? 2*ft : ft;
 
                             if (params.print_realtime) {
                                 if (params.print_timestamps) {
@@ -4686,7 +4690,7 @@ int whisper_full_with_state(
 
                             //printf("tt0 = %d, tt1 = %d, text = %s, token = %s, token_id = %d, tid = %d\n", tt0, tt1, text.c_str(), ctx->vocab.id_to_token[tokens_cur[i].id].c_str(), tokens_cur[i].id, tokens_cur[i].tid);
 
-                            result_all.push_back({ tt0, tt1, text, {}, speaker_turn_next });
+                            result_all.push_back({ tt0, tt1, fft, text, {}, speaker_turn_next });
                             for (int j = i0; j <= i; j++) {
                                 result_all.back().tokens.push_back(tokens_cur[j]);
                             }
@@ -4711,6 +4715,7 @@ int whisper_full_with_state(
                         }
                         i--;
                         t0 = t1;
+                        ft = seek + 2*(tokens_cur[i].tid - whisper_token_beg(ctx));
                         i0 = i + 1;
                         speaker_turn_next = false;
                     }
@@ -4721,6 +4726,7 @@ int whisper_full_with_state(
 
                     const auto tt0 = params.speed_up ? 2*t0 : t0;
                     const auto tt1 = params.speed_up ? 2*t1 : t1;
+                    const auto fft = params.speed_up ? 2*ft : ft;
 
                     if (params.print_realtime) {
                         if (params.print_timestamps) {
@@ -4731,7 +4737,7 @@ int whisper_full_with_state(
                         }
                     }
 
-                    result_all.push_back({ tt0, tt1, text, {} , speaker_turn_next });
+                    result_all.push_back({ tt0, tt1, fft, text, {} , speaker_turn_next });
                     for (int j = i0; j < (int) tokens_cur.size(); j++) {
                         result_all.back().tokens.push_back(tokens_cur[j]);
                     }
@@ -4836,13 +4842,13 @@ int whisper_full_parallel(
 
         for (auto& result : results_i) {
             // correct the segment timestamp taking into account the offset
-            result.t0 += 100 * ((i + 1) * n_samples_per_processor) / WHISPER_SAMPLE_RATE + offset_t;
-            result.t1 += 100 * ((i + 1) * n_samples_per_processor) / WHISPER_SAMPLE_RATE + offset_t;
+            result.seg_begin += 100 * ((i + 1) * n_samples_per_processor) / WHISPER_SAMPLE_RATE + offset_t;
+            result.seg_end += 100 * ((i + 1) * n_samples_per_processor) / WHISPER_SAMPLE_RATE + offset_t;
 
 
             // make sure that segments are not overlapping
             if (!ctx->state->result_all.empty()) {
-                result.t0 = std::max(result.t0, ctx->state->result_all.back().t1);
+                result.seg_begin = std::max(result.seg_begin, ctx->state->result_all.back().seg_end);
             }
 
             ctx->state->result_all.push_back(std::move(result));
@@ -4896,19 +4902,27 @@ int whisper_full_lang_id(struct whisper_context * ctx) {
 }
 
 int64_t whisper_full_get_segment_t0_from_state(struct whisper_state * state, int i_segment) {
-    return state->result_all[i_segment].t0;
+    return state->result_all[i_segment].seg_begin;
 }
 
 int64_t whisper_full_get_segment_t0(struct whisper_context * ctx, int i_segment) {
-    return ctx->state->result_all[i_segment].t0;
+    return ctx->state->result_all[i_segment].seg_begin;
 }
 
 int64_t whisper_full_get_segment_t1_from_state(struct whisper_state * state, int i_segment) {
-    return state->result_all[i_segment].t1;
+    return state->result_all[i_segment].seg_end;
 }
 
 int64_t whisper_full_get_segment_t1(struct whisper_context * ctx, int i_segment) {
-    return ctx->state->result_all[i_segment].t1;
+    return ctx->state->result_all[i_segment].seg_end;
+}
+
+int64_t whisper_full_get_segment_ft_from_state(struct whisper_state * state, int i_segment) {
+    return state->result_all[i_segment].first_token_begin;
+}
+
+int64_t whisper_full_get_segment_ft(struct whisper_context * ctx, int i_segment) {
+    return ctx->state->result_all[i_segment].first_token_begin;
 }
 
 bool whisper_full_get_segment_speaker_turn_next(struct whisper_context * ctx, int i_segment) {
@@ -5238,8 +5252,8 @@ static void whisper_exp_compute_token_level_timestamps(
         return;
     }
 
-    const int64_t t0 = segment.t0;
-    const int64_t t1 = segment.t1;
+    const int64_t t0 = segment.seg_begin;
+    const int64_t t1 = segment.seg_end;
 
     const int n = tokens.size();
 
@@ -5271,7 +5285,8 @@ static void whisper_exp_compute_token_level_timestamps(
                 t_last   = t0;
                 tid_last = whisper_token_beg(&ctx);
             } else {
-                tokens[j    ].t0 = t_last;
+                // tokens[j    ].t0 = t_last;
+                tokens[j    ].t0 = segment.first_token_begin;
             }
         }
 

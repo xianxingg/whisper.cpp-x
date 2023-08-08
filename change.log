@@ -1,0 +1,19 @@
+1. 
+Removed.
+
+2. 
+whisper_segment 结构调整为：
+t0 => seq_begin // segment起点，包括开始的空白部分或背景音
+t1 => seq_end // segment终点，讲话停止点或分割点
++first_token_start // 整个segment中第一个token的起点
+
+3. 
+导出srt修改为字幕跟随语音出现
+卡拉OK模式修改为背景文字常驻、亮色跟随语音出现
+
+4. 
+添加测试文件 genshin-impack.wav
+./main -f genshin-impact.wav -m models/ggml-base.bin -l en -osrt
+./main -f genshin-impact.wav -m models/ggml-base.bin -l en -owts
+source ./genshin-impact.wav.wts
+ffplay genshin-impact.wav.mp4

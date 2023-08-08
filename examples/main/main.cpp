@@ -405,6 +405,7 @@ bool output_srt(struct whisper_context * ctx, const char * fname, const whisper_
         const char * text = whisper_full_get_segment_text(ctx, i);
         const int64_t t0 = whisper_full_get_segment_t0(ctx, i);
         const int64_t t1 = whisper_full_get_segment_t1(ctx, i);
+        const int64_t ft = whisper_full_get_segment_ft(ctx, i);
         std::string speaker = "";
 
         if (params.diarize && pcmf32s.size() == 2)
@@ -413,7 +414,7 @@ bool output_srt(struct whisper_context * ctx, const char * fname, const whisper_
         }
 
         fout << i + 1 + params.offset_n << "\n";
-        fout << to_timestamp(t0, true) << " --> " << to_timestamp(t1, true) << "\n";
+        fout << to_timestamp(ft, true) << " --> " << to_timestamp(t1, true) << "\n";
         fout << speaker << text << "\n\n";
     }
 
@@ -657,7 +658,7 @@ bool output_wts(struct whisper_context * ctx, const char * fname, const char * f
         }
 
         // background text
-        fout << "drawtext=fontfile='" << font << "':fontsize=24:fontcolor=gray:x=(w-text_w)/2:y=h/2:text='':enable='between(t," << t0/100.0 << "," << t0/100.0 << ")'";
+        fout << "\ndrawtext=fontfile='" << font << "':fontsize=24:fontcolor=gray:x=(w-text_w)/2:y=h/2:text='':enable='between(t," << t0/100.0 << "," << t0/100.0 << ")'";
 
         bool is_first = true;
         std::string speaker = "";
@@ -721,15 +722,15 @@ bool output_wts(struct whisper_context * ctx, const char * fname, const char * f
 
             if (is_first) {
                 // background text
-                fout << ",drawtext=fontfile='" << font << "':fontsize=24:fontcolor=gray:x=(w-text_w)/2:y=h/2:text='" << txt_bg << "':enable='between(t," << t0/100.0 << "," << t1/100.0 << ")'";
+                fout << ",\ndrawtext=fontfile='" << font << "':fontsize=24:fontcolor=gray:x=(w-text_w)/2:y=h/2:text='" << txt_bg << "':enable='between(t," << t0/100.0 << "," << t1/100.0 << ")'";
                 is_first = false;
             }
 
             // foreground text
-            fout << ",drawtext=fontfile='" << font << "':fontsize=24:fontcolor=lightgreen:x=(w-text_w)/2+8:y=h/2:text='" << txt_fg << "':enable='between(t," << token.t0/100.0 << "," << token.t1/100.0 << ")'";
+            fout << ",\ndrawtext=fontfile='" << font << "':fontsize=24:fontcolor=lightgreen:x=(w-text_w)/2+8:y=h/2:text='" << txt_fg << "':enable='between(t," << token.t0/100.0 << "," << token.t1/100.0 << ")'";
 
             // underline
-            fout << ",drawtext=fontfile='" << font << "':fontsize=24:fontcolor=lightgreen:x=(w-text_w)/2+8:y=h/2+16:text='" << txt_ul << "':enable='between(t," << token.t0/100.0 << "," << token.t1/100.0 << ")'";
+            fout << ",\ndrawtext=fontfile='" << font << "':fontsize=24:fontcolor=lightgreen:x=(w-text_w)/2+8:y=h/2+16:text='" << txt_ul << "':enable='between(t," << token.t0/100.0 << "," << token.t1/100.0 << ")'";
         }
     }
 
